@@ -118,15 +118,21 @@ function buildLevel(ctx, level) {
 function ensurePlayerMesh(ctx, p) {
   if (ctx.playerMeshes.has(p.id)) return ctx.playerMeshes.get(p.id);
   const group = new THREE.Group();
-  const bodyGeo = new THREE.CapsuleGeometry(0.35, 0.9, 4, 8);
   const bodyMat = new THREE.MeshStandardMaterial({ color: 0x4488cc });
-  const body = new THREE.Mesh(bodyGeo, bodyMat);
-  body.position.y = 0.9;
-  body.castShadow = true;
-  group.add(body);
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.3, 0.6, 4, 8), bodyMat);
+  torso.position.y = 0.75;
+  torso.castShadow = true;
+  group.add(torso);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 12), new THREE.MeshStandardMaterial({ color: 0xe8c39e }));
+  head.position.y = 1.25;
+  head.castShadow = true;
+  group.add(head);
+  const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.4, 0.18), new THREE.MeshStandardMaterial({ color: 0x2e2e2e }));
+  backpack.position.set(0, 0.85, -0.28);
+  group.add(backpack);
 
-  const light = new THREE.SpotLight(0x6fff8f, 1.2, 14, Math.PI / 6, 0.5);
-  light.position.set(0, 1.4, 0);
+  const light = new THREE.SpotLight(0x9fffb0, 1.6, 16, Math.PI / 6, 0.5);
+  light.position.set(0, 1.3, 0);
   group.add(light);
   const lightTarget = new THREE.Object3D();
   lightTarget.position.set(2, 0, 0);
@@ -140,42 +146,191 @@ function ensurePlayerMesh(ctx, p) {
   ring.position.y = 0.02;
   group.add(ring);
 
+  const label = makeLabelSprite(p.name || 'Thief', '#6fff8f');
+  label.position.set(0, 1.75, 0);
+  group.add(label);
+
   ctx.scene.add(group);
-  const entry = { group, body, light, lightTarget, ring };
+  const entry = { group, body: torso, head, light, lightTarget, ring, label };
   ctx.playerMeshes.set(p.id, entry);
   return entry;
+}
+
+// ---- Procedural monster models (no external art — built from primitives so every type reads as a distinct silhouette) ----
+function buildMonsterModel(type, baseColor) {
+  const group = new THREE.Group();
+  const robeMat = new THREE.MeshStandardMaterial({ color: baseColor, roughness: 0.85 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6 });
+  const glowMat = (c) => new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 1.5 });
+
+  if (type === 'blind_listener') {
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.5, 8), robeMat);
+    robe.position.y = 0.85; group.add(robe);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), skinMat);
+    head.position.y = 1.55; group.add(head);
+    const blindfold = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.1, 0.06), new THREE.MeshStandardMaterial({ color: 0x111111 }));
+    blindfold.position.set(0, 1.57, 0.27); group.add(blindfold);
+    [[-0.32, 1.6, -0.45], [0.32, 1.6, -0.45]].forEach(([x, y, rotY]) => {
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 6), robeMat);
+      ear.position.set(x, y, 0);
+      ear.rotation.z = x < 0 ? 0.9 : -0.9;
+      group.add(ear);
+    });
+  } else if (type === 'deaf_watcher') {
+    const robe = new THREE.Mesh(new THREE.ConeGeometry(0.48, 1.5, 8), robeMat);
+    robe.position.y = 0.85; group.add(robe);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), skinMat);
+    head.position.y = 1.55; group.add(head);
+    [[-0.13, 0], [0.13, 0]].forEach(([x]) => {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), glowMat(0xffe24a));
+      eye.position.set(x, 1.58, 0.26);
+      group.add(eye);
+    });
+  } else if (type === 'sniffer') {
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.55, 0.9), robeMat);
+    body.position.y = 0.7; body.rotation.x = 0.15; group.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 12), skinMat);
+    head.position.set(0, 0.95, 0.55); group.add(head);
+    const snout = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.45, 8), skinMat);
+    snout.rotation.x = Math.PI / 2;
+    snout.position.set(0, 0.9, 0.95); group.add(snout);
+    const nose = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), glowMat(0xff5050));
+    nose.position.set(0, 0.9, 1.17); group.add(nose);
+    [[-0.55, 0.5], [0.55, 0.5]].forEach(([x]) => {
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.55, 6), skinMat);
+      leg.position.set(x * 0.3, 0.3, 0.3); group.add(leg);
+    });
+  } else if (type === 'mirror') {
+    const mirrorMat = new THREE.MeshStandardMaterial({ color: 0xc8d6e0, metalness: 1, roughness: 0.05 });
+    const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.7, 4, 8), mirrorMat);
+    torso.position.y = 0.85; group.add(torso);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), mirrorMat);
+    head.position.y = 1.5; group.add(head);
+  } else if (type === 'sleeper') {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 12), robeMat);
+    body.scale.set(1, 0.7, 1.1);
+    body.position.y = 0.45; group.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 12, 12), skinMat);
+    head.position.set(0, 0.55, 0.5); group.add(head);
+    const lash1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.02), new THREE.MeshStandardMaterial({ color: 0x000000 }));
+    lash1.position.set(-0.1, 0.58, 0.74); group.add(lash1);
+    const lash2 = lash1.clone(); lash2.position.x = 0.1; group.add(lash2);
+  } else if (type === 'hoarder') {
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.4, 0.5, 4, 8), robeMat);
+    body.position.y = 0.7; body.rotation.x = 0.2; group.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 12), skinMat);
+    head.position.set(0, 1.25, 0.1); group.add(head);
+    [[-0.18, 0], [0.18, 0]].forEach(([x]) => {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8), glowMat(0x6fff8f));
+      eye.position.set(x, 1.3, 0.34); group.add(eye);
+    });
+    const sack = new THREE.Mesh(new THREE.SphereGeometry(0.35, 8, 8), new THREE.MeshStandardMaterial({ color: 0x4a3a2a }));
+    sack.scale.set(1, 1.2, 0.8);
+    sack.position.set(0, 0.9, -0.45); group.add(sack);
+  }
+  group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return group;
 }
 
 function ensureMonsterMesh(ctx, m) {
   if (ctx.monsterMeshes.has(m.id)) return ctx.monsterMeshes.get(m.id);
   const def = GameData.MONSTER_TYPES[m.type];
   const group = new THREE.Group();
-  const geo = new THREE.ConeGeometry(0.5, 1.8, 6);
-  const mat = new THREE.MeshStandardMaterial({ color: def.color, emissive: 0x110000 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  group.add(mesh);
+  const model = buildMonsterModel(m.type, def.color);
+  group.add(model);
   const label = makeLabelSprite(def.name, '#ff8080');
-  label.position.set(0, 1.6, 0);
+  label.position.set(0, 2.1, 0);
   group.add(label);
   ctx.scene.add(group);
-  const entry = { group, mesh };
+  const entry = { group, model };
   ctx.monsterMeshes.set(m.id, entry);
   return entry;
+}
+
+// ---- Procedural item models — distinct silhouette per item type instead of generic cubes ----
+function buildItemModel(def) {
+  const group = new THREE.Group();
+  const color = def.fragile ? 0xffe0a0 : 0xd0b070;
+  const mat = new THREE.MeshStandardMaterial({ color, metalness: 0.25, roughness: 0.5 });
+  switch (def.model) {
+    case 'vase': {
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 0.55, 12), mat);
+      mesh.position.y = 0.28; group.add(mesh);
+      break;
+    }
+    case 'painting': {
+      const frame = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.06), new THREE.MeshStandardMaterial({ color: 0x3a2a18 }));
+      frame.position.y = 0.4; group.add(frame);
+      const canvas = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.57), new THREE.MeshStandardMaterial({ color: 0x6a4a8a }));
+      canvas.position.set(0, 0.4, 0.035); group.add(canvas);
+      break;
+    }
+    case 'statue': {
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 0.15, 10), new THREE.MeshStandardMaterial({ color: 0xffd76b, metalness: 0.8, roughness: 0.3 }));
+      base.position.y = 0.08; group.add(base);
+      const body = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 8), new THREE.MeshStandardMaterial({ color: 0xffd76b, metalness: 0.8, roughness: 0.3 }));
+      body.position.y = 0.45; group.add(body);
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 10, 10), new THREE.MeshStandardMaterial({ color: 0xffd76b, metalness: 0.8, roughness: 0.3 }));
+      head.position.y = 0.78; group.add(head);
+      break;
+    }
+    case 'tv': {
+      const screen = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.45, 0.06), new THREE.MeshStandardMaterial({ color: 0x0a0a0a, emissive: 0x113355, emissiveIntensity: 0.6 }));
+      screen.position.y = 0.45; group.add(screen);
+      const stand = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.15), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+      stand.position.y = 0.2; group.add(stand);
+      break;
+    }
+    case 'safe': {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.6, 0.5), new THREE.MeshStandardMaterial({ color: 0x33363b, metalness: 0.6, roughness: 0.4 }));
+      body.position.y = 0.3; group.add(body);
+      const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.04, 12), new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 1 }));
+      dial.rotation.x = Math.PI / 2;
+      dial.position.set(0, 0.35, 0.26); group.add(dial);
+      break;
+    }
+    case 'crown': {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.05, 8, 16), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1, roughness: 0.2 }));
+      ring.position.y = 0.3; ring.rotation.x = Math.PI / 2; group.add(ring);
+      for (let i = 0; i < 5; i++) {
+        const spike = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.14, 6), new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 1 }));
+        const a = (i / 5) * Math.PI * 2;
+        spike.position.set(Math.cos(a) * 0.2, 0.42, Math.sin(a) * 0.2);
+        group.add(spike);
+      }
+      break;
+    }
+    case 'chandelier': {
+      const center = new THREE.Mesh(new THREE.SphereGeometry(0.15, 10, 10), new THREE.MeshStandardMaterial({ color: 0xfff6d0, metalness: 0.7 }));
+      center.position.y = 0.7; group.add(center);
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2;
+        const bead = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), new THREE.MeshStandardMaterial({ color: 0xddeeff, metalness: 0.9, roughness: 0.1 }));
+        bead.position.set(Math.cos(a) * 0.25, 0.55, Math.sin(a) * 0.25);
+        group.add(bead);
+      }
+      break;
+    }
+    case 'box':
+    case 'crate':
+    default: {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.35, 0.4), mat);
+      mesh.position.y = 0.18; group.add(mesh);
+      break;
+    }
+  }
+  group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  return group;
 }
 
 function ensureItemMesh(ctx, item) {
   if (ctx.itemMeshes.has(item.id)) return ctx.itemMeshes.get(item.id);
   const def = GameData.ITEM_DEFS[item.type];
   const group = new THREE.Group();
-  const size = 0.3 + (def.weight || 1) * 0.15;
-  const geo = new THREE.BoxGeometry(size, size, size);
-  const mat = new THREE.MeshStandardMaterial({ color: def.fragile ? 0xffe0a0 : 0xd0b070, metalness: 0.3 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.castShadow = true;
-  group.add(mesh);
+  const model = buildItemModel(def);
+  group.add(model);
   const label = makeLabelSprite(`${def.name} ($${def.value})`, '#ffe9b0');
-  label.position.set(0, size + 0.5, 0);
+  label.position.set(0, 1.0, 0);
   group.add(label);
   const glowGeo = new THREE.RingGeometry(0.45, 0.55, 24);
   const glowMat = new THREE.MeshBasicMaterial({ color: 0x6fff8f, transparent: true, opacity: 0, side: THREE.DoubleSide });
@@ -184,7 +339,7 @@ function ensureItemMesh(ctx, item) {
   glow.position.y = 0.03;
   group.add(glow);
   ctx.scene.add(group);
-  const entry = { group, mesh, label, glow };
+  const entry = { group, model, label, glow };
   ctx.itemMeshes.set(item.id, entry);
   return entry;
 }
@@ -216,7 +371,8 @@ export function syncScene(ctx, state, myId) {
     const entry = ensureMonsterMesh(ctx, m);
     entry.group.position.set(m.x, 0.9, m.y);
     entry.group.rotation.y = -m.facing + Math.PI / 2;
-    entry.mesh.material.emissive.set(m.state === 'chase' || m.state === 'raging' ? 0x880000 : 0x110000);
+    const chasing = m.state === 'chase' || m.state === 'raging';
+    entry.model.traverse((o) => { if (o.isMesh && o.material && o.material.emissive) o.material.emissive.set(chasing ? 0x880000 : 0x000000); });
   }
 
   const livingItemIds = new Set(state.items.map(i => i.id));
@@ -236,7 +392,10 @@ export function syncScene(ctx, state, myId) {
       const near = me && Math.hypot(item.x - me.x, item.y - me.y) < 1.5;
       entry.glow.material.opacity = near ? 0.7 : 0;
     }
-    entry.mesh.material.color.set(item.broken ? 0x553333 : (GameData.ITEM_DEFS[item.type].fragile ? 0xffe0a0 : 0xd0b070));
+    if (item.broken && !entry.brokenApplied) {
+      entry.model.traverse((o) => { if (o.isMesh && o.material && o.material.color) o.material.color.set(0x553333); });
+      entry.brokenApplied = true;
+    }
   }
 
   const liveSmokeIds = new Set((state.smokeZones || []).map((z, i) => 'z' + i));
