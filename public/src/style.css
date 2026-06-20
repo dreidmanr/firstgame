@@ -46,3 +46,10 @@ button:hover { background: #1c4429; }
 #hud-prompt { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); color: #ffd36f; text-shadow: 0 0 6px #000; font-size: 0.9rem; }
 #hud-downed { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #ff3b3b; font-size: 1.6rem; display: none; text-shadow: 0 0 10px #000; }
 body.downed #hud-downed { display: block; }
+#hud-alarm {
+  position: absolute; top: 50px; left: 50%; transform: translateX(-50%);
+  color: #ff2020; font-size: 1.3rem; font-weight: bold; letter-spacing: 0.15rem;
+  text-shadow: 0 0 12px #800; animation: pulse 0.6s infinite alternate;
+}
+@keyframes pulse { from { opacity: 0.6; } to { opacity: 1; } }
+#hud-role { position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%); color: #ff66cc; font-size: 0.75rem; max-width: 420px; text-align: center; text-shadow: 0 0 6px #000; }

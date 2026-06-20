@@ -86,6 +86,9 @@ socket.on('runStarted', (state) => {
   showOnly(null);
   ui.hud.classList.remove('hidden');
   latestState = state;
+  isBetrayer = false;
+  document.getElementById('hud-role').textContent = '';
+  document.getElementById('hud-alarm').classList.add('hidden');
 });
 
 socket.on('state', (state) => {
@@ -96,6 +99,13 @@ socket.on('state', (state) => {
   document.getElementById('hud-goal').textContent = `$${Math.round(state.stolenValue)} / $${state.level.goal}`;
   document.getElementById('hud-noise-label').textContent = me ? `Noise: ${(me.lastNoise * 100).toFixed(0)}%` : '';
   renderInventory(me, state);
+  const alarmEl = document.getElementById('hud-alarm');
+  if (state.alarmActive) {
+    alarmEl.classList.remove('hidden');
+    alarmEl.textContent = `ALARM! MONSTERS BERSERK — ${state.alarmTimer}s`;
+  } else {
+    alarmEl.classList.add('hidden');
+  }
 });
 
 function renderInventory(me, state) {
@@ -114,6 +124,18 @@ function renderInventory(me, state) {
 }
 
 socket.on('cashUpdate', () => {});
+
+let isBetrayer = false;
+socket.on('role', (data) => {
+  if (data.betrayer) {
+    isBetrayer = true;
+    document.getElementById('hud-role').textContent = data.info;
+  }
+});
+
+socket.on('alarm', () => {
+  document.getElementById('hud-alarm').classList.remove('hidden');
+});
 
 socket.on('runEnded', (data) => {
   ui.hud.classList.add('hidden');
@@ -176,6 +198,19 @@ function sendInput() {
       const van = latestState.level.vanPos;
       if (Math.hypot(me.x - van.x, me.y - van.y) < 3) socket.emit('sellAtVan');
     }
+  }
+  if (keys['KeyG'] && Date.now() - lastInteractTime > 400) {
+    lastInteractTime = Date.now();
+    const me = latestState && latestState.players.find(p => p.id === myId);
+    if (me && me.ownedItems) {
+      const priority = ['net', 'sleep_gas', 'smoke_bomb', 'anti_smell_spray'];
+      const toolKey = priority.find(k => (me.ownedItems[k] || 0) > 0);
+      if (toolKey) socket.emit('interact', { action: 'use_tool', toolKey });
+    }
+  }
+  if (keys['KeyB'] && isBetrayer && Date.now() - lastInteractTime > 400) {
+    lastInteractTime = Date.now();
+    socket.emit('interact', { action: 'sabotage' });
   }
 }
 

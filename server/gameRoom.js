@@ -81,15 +81,25 @@ class GameRoom {
       }
     });
     this.run = {
-      level, items, monsters,
-      noiseEvents: [], alarmTriggered: false, alarmTimer: 0,
+      level, items, monsters, smokeZones: [],
+      noiseEvents: [], alarmTriggered: false, alarmTimer: 0, alarmActive: false, heatLevel: 0,
       stolenValue: 0, startTime: Date.now()
     };
     let i = 0;
-    for (const p of this.players.values()) {
+    const players = [...this.players.values()];
+    for (const p of players) {
       p.x = level.vanPos.x + (i % 2); p.y = level.vanPos.y + Math.floor(i / 2);
-      p.downed = false; p.inventory = [null, null, null];
+      p.downed = false; p.inventory = [null, null, null]; p.secretBetrayer = false;
+      p.sabotageCooldown = 0;
       i++;
+    }
+    if (players.length >= 2 && Math.random() < 0.4) {
+      const betrayer = players[Math.floor(Math.random() * players.length)];
+      betrayer.secretBetrayer = true;
+      betrayer.socket.emit('role', {
+        betrayer: true,
+        info: 'You secretly work for security. Press B near a monster to reveal a random teammate\'s location to it.'
+      });
     }
     this.io.to(this.code).emit('runStarted', this.serializeRun());
   }
@@ -120,6 +130,7 @@ class GameRoom {
       p.lastNoise = strength;
       if (strength > 0.15) {
         this.run.noiseEvents.push({ x: p.x, y: p.y, radius: 3 + strength * 6, strength, playerId: p.id });
+        this.run.heatLevel += strength * 0.15;
       }
     } else {
       p.lastNoise = 0;
@@ -150,6 +161,8 @@ class GameRoom {
         this.run.noiseEvents.push({ x: p.x, y: p.y, radius: 10, strength: 2.0, playerId: p.id });
       }
     } else if (data.action === 'decoy') {
+      if (!p.ownedItems.music_box) return;
+      p.ownedItems.music_box--;
       this.run.noiseEvents.push({ x: data.x, y: data.y, radius: 12, strength: 1.5, playerId: null });
     } else if (data.action === 'revive') {
       const target = this.players.get(data.targetId);
@@ -157,6 +170,59 @@ class GameRoom {
         const dist = Math.hypot(target.x - p.x, target.y - p.y);
         if (dist < 1.8) target.downed = false;
       }
+    } else if (data.action === 'use_tool') {
+      this.useTool(p, data.toolKey);
+    } else if (data.action === 'sabotage') {
+      this.sabotage(p);
+    }
+  }
+
+  useTool(p, toolKey) {
+    if (!p.ownedItems[toolKey]) return;
+    const range = 8;
+    let nearest = null, nearestD = range;
+    for (const m of this.run.monsters) {
+      const d = Math.hypot(m.x - p.x, m.y - p.y);
+      if (d < nearestD) { nearestD = d; nearest = m; }
+    }
+    if (toolKey === 'smoke_bomb') {
+      p.ownedItems.smoke_bomb--;
+      this.run.smokeZones.push({ x: p.x, y: p.y, radius: 6, expiresAt: Date.now() + 15000 });
+    } else if (toolKey === 'net') {
+      if (!nearest) return;
+      p.ownedItems.net--;
+      nearest.state = 'trapped';
+      nearest.stateTimer = 8;
+    } else if (toolKey === 'sleep_gas') {
+      if (!nearest) return;
+      p.ownedItems.sleep_gas--;
+      nearest.state = 'return';
+      nearest.targetPlayerId = null;
+      nearest.lastKnownX = null;
+    } else if (toolKey === 'anti_smell_spray') {
+      p.ownedItems.anti_smell_spray--;
+      p.smellBlockedUntil = Date.now() + 60000;
+    }
+  }
+
+  sabotage(p) {
+    if (!p.secretBetrayer) return;
+    const now = Date.now();
+    if (p.sabotageCooldown && now < p.sabotageCooldown) return;
+    p.sabotageCooldown = now + 20000;
+    const others = [...this.players.values()].filter(o => o.id !== p.id && !o.downed);
+    if (!others.length || !this.run.monsters.length) return;
+    const victim = others[Math.floor(Math.random() * others.length)];
+    let nearest = null, nearestD = Infinity;
+    for (const m of this.run.monsters) {
+      const d = Math.hypot(m.x - p.x, m.y - p.y);
+      if (d < nearestD) { nearestD = d; nearest = m; }
+    }
+    if (nearest) {
+      nearest.state = 'chase';
+      nearest.targetPlayerId = victim.id;
+      nearest.lastKnownX = victim.x;
+      nearest.lastKnownY = victim.y;
     }
   }
 
@@ -211,9 +277,42 @@ class GameRoom {
     if (this.phase !== 'run' || !this.run) return;
     const dt = TICK_MS / 1000;
     const players = [...this.players.values()];
+
+    this.run.smokeZones = this.run.smokeZones.filter(z => z.expiresAt > Date.now());
+    this.run.heatLevel = Math.max(0, this.run.heatLevel - dt * 0.3);
+    if (!this.run.alarmTriggered && this.run.heatLevel > 6) {
+      this.run.alarmTriggered = true;
+      this.run.alarmActive = true;
+      this.run.alarmTimer = 60;
+      this.io.to(this.code).emit('alarm', { triggered: true });
+    }
+    if (this.run.alarmActive) {
+      this.run.alarmTimer -= dt;
+      if (this.run.alarmTimer <= 0) {
+        this.run.alarmActive = false;
+        this.endRun(false);
+        return;
+      }
+    }
+
     for (const m of this.run.monsters) {
-      m.update(dt, players, this.run.noiseEvents, this.run);
-      if (m.state === 'chase') {
+      if (this.run.alarmActive && m.state !== 'trapped') {
+        // berserk: every monster becomes an aggressive hunter, ignoring its normal detection rules
+        let nearest = null, nearestD = Infinity;
+        for (const p of players) {
+          if (p.downed) continue;
+          const d = Math.hypot(p.x - m.x, p.y - m.y);
+          if (d < nearestD) { nearestD = d; nearest = p; }
+        }
+        if (nearest) {
+          m.state = 'chase'; m.targetPlayerId = nearest.id;
+          m.lastKnownX = nearest.x; m.lastKnownY = nearest.y;
+          m.moveToward(nearest.x, nearest.y, m.def.chaseSpeed * 1.3, dt);
+        }
+      } else {
+        m.update(dt, players, this.run.noiseEvents, this.run);
+      }
+      if (m.state === 'chase' || m.state === 'raging') {
         for (const p of players) {
           if (Math.hypot(p.x - m.x, p.y - m.y) < 1 && !p.downed) {
             p.downed = true;
@@ -239,9 +338,11 @@ class GameRoom {
       players: [...this.players.values()].map(p => ({
         id: p.id, name: p.name, x: p.x, y: p.y, facing: p.facing,
         crouching: p.crouching, running: p.running, downed: p.downed,
-        lastNoise: p.lastNoise, inventory: p.inventory
+        lastNoise: p.lastNoise, inventory: p.inventory, ownedItems: p.ownedItems
       })),
-      stolenValue: this.run.stolenValue
+      stolenValue: this.run.stolenValue,
+      alarmActive: this.run.alarmActive, alarmTimer: Math.max(0, Math.round(this.run.alarmTimer)),
+      smokeZones: this.run.smokeZones
     };
   }
 

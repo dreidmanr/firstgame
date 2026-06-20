@@ -186,6 +186,24 @@ export function syncScene(ctx, state, myId) {
     mesh.material.color.set(item.broken ? 0x553333 : (GameData.ITEM_DEFS[item.type].fragile ? 0xffe0a0 : 0xd0b070));
   }
 
+  const liveSmokeIds = new Set((state.smokeZones || []).map((z, i) => 'z' + i));
+  if (!ctx.smokeMeshes) ctx.smokeMeshes = new Map();
+  for (const [id, mesh] of ctx.smokeMeshes) {
+    if (!liveSmokeIds.has(id)) { ctx.scene.remove(mesh); ctx.smokeMeshes.delete(id); }
+  }
+  (state.smokeZones || []).forEach((z, i) => {
+    const id = 'z' + i;
+    let mesh = ctx.smokeMeshes.get(id);
+    if (!mesh) {
+      const geo = new THREE.SphereGeometry(z.radius, 12, 8);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.25 });
+      mesh = new THREE.Mesh(geo, mat);
+      ctx.scene.add(mesh);
+      ctx.smokeMeshes.set(id, mesh);
+    }
+    mesh.position.set(z.x, 1, z.y);
+  });
+
   if (me) {
     const camDist = 12, camHeight = 10;
     ctx.camera.position.set(me.x - Math.cos(0) * camDist * 0.4, camHeight, me.y + camDist * 0.6);

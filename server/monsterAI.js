@@ -27,9 +27,14 @@ class Monster {
   // Core per-tick update. players: array of {id,x,y,running,crouching,downed,lastNoise}
   // noiseEvents: array of {x,y,radius,strength} generated this tick
   update(dt, players, noiseEvents, level) {
+    if (this.state === 'trapped') {
+      this.stateTimer -= dt;
+      if (this.stateTimer <= 0) this.state = 'patrol';
+      return;
+    }
     switch (this.type) {
       case 'blind_listener': this.updateBlindListener(dt, players, noiseEvents); break;
-      case 'deaf_watcher': this.updateDeafWatcher(dt, players); break;
+      case 'deaf_watcher': this.updateDeafWatcher(dt, players, level); break;
       case 'sniffer': this.updateSniffer(dt, players); break;
       case 'mirror': this.updateMirror(dt, players); break;
       case 'sleeper': this.updateSleeper(dt, players, noiseEvents); break;
@@ -70,22 +75,27 @@ class Monster {
   }
 
   // --- Deaf Watcher: vision cone, fixed patrol route ---
-  updateDeafWatcher(dt, players) {
+  updateDeafWatcher(dt, players, level) {
     if (this.state === 'patrol') {
       for (const p of players) {
         if (p.downed) continue;
-        if (this.canSee(p)) { this.state = 'chase'; this.targetPlayerId = p.id; this.lastKnownX = p.x; this.lastKnownY = p.y; this.stateTimer = 0; }
+        if (this.canSee(p, level)) { this.state = 'chase'; this.targetPlayerId = p.id; this.lastKnownX = p.x; this.lastKnownY = p.y; this.stateTimer = 0; }
       }
     } else if (this.state === 'chase') {
       const target = players.find(p => p.id === this.targetPlayerId);
-      if (target && this.canSee(target)) { this.lastKnownX = target.x; this.lastKnownY = target.y; }
+      if (target && this.canSee(target, level)) { this.lastKnownX = target.x; this.lastKnownY = target.y; }
     }
     this.runStateMachine(dt, players);
   }
 
-  canSee(p) {
+  canSee(p, level) {
     const d = this.dist(this, p);
     if (d > this.def.visionRange) return false;
+    if (level && level.smokeZones) {
+      for (const z of level.smokeZones) {
+        if (Math.hypot(z.x - p.x, z.y - p.y) < z.radius || Math.hypot(z.x - this.x, z.y - this.y) < z.radius) return false;
+      }
+    }
     const angleTo = Math.atan2(p.y - this.y, p.x - this.x);
     let diff = Math.abs(angleTo - this.facing);
     if (diff > Math.PI) diff = Math.PI * 2 - diff;
@@ -96,6 +106,7 @@ class Monster {
   updateSniffer(dt, players) {
     for (const p of players) {
       if (p.downed) continue;
+      if (p.smellBlockedUntil && Date.now() < p.smellBlockedUntil) continue;
       const range = p.ranRecently ? this.def.smellRangeRun : this.def.smellRangeBase;
       if (this.dist(this, p) < range) {
         this.state = 'chase'; this.targetPlayerId = p.id;

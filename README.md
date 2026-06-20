@@ -36,6 +36,9 @@ Open `http://localhost:3000` in 2–4 browser tabs (or share your LAN/tunnel URL
 - **Shop**: all 12 gear items from the spec, purchasable with shared team cash between levels.
 - **Online co-op**: Socket.io rooms, 2–4 players, host/join via 4-letter code, authoritative 20Hz server tick syncing all player/monster/item state.
 - **Downed/revive**: getting caught downs a player (and screams — emits noise); teammates revive by interacting nearby.
+- **Active tools** (G key, consumed from shared team inventory): Net traps the nearest monster for 8s, Sleep Gas forces it back to patrol, Smoke Bomb creates a fog zone that blocks vision-based monsters' line of sight for 15s, Anti-Smell Spray blocks the Sniffer's detection of you for 60s.
+- **Alarm/berserk mode**: sustained noise builds up a hidden "heat" meter; once it crosses a threshold, an alarm triggers — every monster instantly goes aggressive and hunts the nearest player for a 60-second window. Fail to finish (or fail to bring heat back down) before it expires and the run ends.
+- **Secret betrayer**: at the start of a run there's a chance one player is secretly working for security (only they're told). Their hidden ability (B key, 20s cooldown) reveals a random teammate's location to the nearest monster.
 - Minimal EN/RU UI string toggle (top-right of main menu) as a starting point for full localization.
 
 ## Honest scope notes
@@ -44,7 +47,6 @@ This is a real, working multiplayer prototype proving out every system in the de
 
 - Hand-modeled 3D art/animations (currently primitive geometric meshes), volumetric fog/bloom post-processing, particle FX.
 - Full 3D positional voice chat (would need WebRTC audio mesh + push-to-talk UI).
-- The secret-betrayer mechanic, smoke bomb/net/sleep-gas active item effects, and the alarm/berserk-mode escape window are stubbed in data but not all wired to gameplay yet.
 - Full Russian/English localization of all in-game text (only a handful of menu strings are toggled today).
 - A signed, packaged Steam build (Steamworks SDK, depot config, achievements).
 
