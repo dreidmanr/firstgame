@@ -1,0 +1,21 @@
+{
+  "name": "ghost-heist",
+  "version": "1.0.0",
+  "description": "Ghost Heist - co-op horror heist game",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "http://local_proxy@127.0.0.1:41359/git/dreidmanr/firstgame"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.2.1",
+    "socket.io": "^4.8.3"
+  }
+}

@@ -1,0 +1,48 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: #05060a; color: #d8e3e0; font-family: 'Courier New', monospace; overflow: hidden; height: 100%; }
+#app { position: relative; width: 100vw; height: 100vh; }
+#game-canvas { position: absolute; inset: 0; }
+
+.screen {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(circle at center, rgba(5,8,12,0.92), rgba(0,0,0,0.97));
+  z-index: 10;
+}
+.hidden { display: none !important; }
+
+h1 { font-size: 4rem; letter-spacing: 0.3rem; color: #6fff8f; text-shadow: 0 0 20px #1f8f3a; margin-bottom: 0; }
+.subtitle { color: #8899aa; letter-spacing: 0.2rem; margin-top: 0; }
+h2 { color: #ff5b5b; letter-spacing: 0.15rem; }
+
+input { background: #11151c; border: 1px solid #2b3340; color: #d8e3e0; padding: 10px; font-family: inherit; margin: 6px; border-radius: 4px; }
+button {
+  background: #15301f; color: #6fff8f; border: 1px solid #2f7a4a; padding: 10px 22px;
+  font-family: inherit; cursor: pointer; border-radius: 4px; margin-top: 10px; letter-spacing: 0.1rem;
+}
+button:hover { background: #1c4429; }
+.join-row { display: flex; }
+.error { color: #ff5b5b; min-height: 1.2em; }
+.lang-toggle { position: absolute; bottom: 16px; right: 20px; color: #667; cursor: pointer; }
+.lang-active { color: #6fff8f; }
+
+#lobby-players { list-style: none; padding: 0; color: #cde; }
+#lobby-players li { padding: 4px 0; }
+
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 760px; }
+.shop-card { background: #11151c; border: 1px solid #2b3340; border-radius: 6px; padding: 10px; text-align: left; }
+.shop-card h3 { margin: 0 0 4px; color: #ffd36f; font-size: 0.95rem; }
+.shop-card p { margin: 0 0 8px; font-size: 0.78rem; color: #99a; }
+.shop-card button { width: 100%; margin: 0; }
+#shop-cash { font-size: 1.3rem; color: #6fff8f; margin-bottom: 10px; }
+
+#hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+#hud-top { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; color: #ddd; text-shadow: 0 0 6px #000; }
+#hud-level { font-size: 1.1rem; letter-spacing: 0.1rem; }
+#hud-goal { color: #6fff8f; }
+#hud-inventory { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; }
+#hud-inventory .slot { width: 56px; height: 56px; border: 2px solid #345; border-radius: 6px; background: rgba(10,14,20,0.7); display: flex; align-items: center; justify-content: center; font-size: 0.6rem; text-align: center; color: #9ab; }
+#hud-noise-label { position: absolute; top: 16px; left: 16px; font-size: 0.75rem; color: #8f8; text-shadow: 0 0 6px #000; }
+#hud-prompt { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); color: #ffd36f; text-shadow: 0 0 6px #000; font-size: 0.9rem; }
+#hud-downed { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); color: #ff3b3b; font-size: 1.6rem; display: none; text-shadow: 0 0 10px #000; }
+body.downed #hud-downed { display: block; }

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Ghost Heist</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="stylesheet" href="src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game-canvas"></canvas>
+
+    <div id="screen-menu" class="screen">
+      <h1>GHOST HEIST</h1>
+      <p class="subtitle">co-op horror heist</p>
+      <input id="name-input" placeholder="Your name" maxlength="16" />
+      <button id="btn-create">Host Game</button>
+      <div class="join-row">
+        <input id="code-input" placeholder="ROOM CODE" maxlength="4" />
+        <button id="btn-join">Join</button>
+      </div>
+      <p id="menu-error" class="error"></p>
+      <p class="lang-toggle">
+        <span id="lang-en" class="lang-active">EN</span> / <span id="lang-ru">RU</span>
+      </p>
+    </div>
+
+    <div id="screen-lobby" class="screen hidden">
+      <h2>Room <span id="lobby-code"></span></h2>
+      <ul id="lobby-players"></ul>
+      <button id="btn-start">Start Heist</button>
+    </div>
+
+    <div id="screen-shop" class="screen hidden">
+      <h2 id="shop-title">Pawnshop &amp; Gear Shop</h2>
+      <div id="shop-cash"></div>
+      <div id="shop-items" class="grid"></div>
+      <button id="btn-to-house">Go to House</button>
+    </div>
+
+    <div id="screen-results" class="screen hidden">
+      <h2 id="results-title"></h2>
+      <p id="results-body"></p>
+      <button id="btn-continue">Continue</button>
+    </div>
+
+    <div id="hud" class="hidden">
+      <div id="hud-top">
+        <div id="hud-level"></div>
+        <div id="hud-goal"></div>
+      </div>
+      <div id="hud-inventory"></div>
+      <div id="hud-noise-label"></div>
+      <div id="hud-prompt"></div>
+      <div id="hud-downed">DOWNED — hold E near teammate to revive</div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+    }
+  }
+  </script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/shared/data.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
