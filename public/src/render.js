@@ -9,16 +9,18 @@ export function initScene(canvas) {
   renderer.shadowMap.enabled = true;
 
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x040608);
-  scene.fog = new THREE.FogExp2(0x040608, 0.045);
+  scene.background = new THREE.Color(0x0c1018);
+  scene.fog = new THREE.FogExp2(0x0c1018, 0.018);
 
   const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
 
-  const ambient = new THREE.AmbientLight(0x1a2230, 0.6);
+  const ambient = new THREE.AmbientLight(0x8fa0b8, 1.1);
   scene.add(ambient);
+  const hemi = new THREE.HemisphereLight(0x6f8fff, 0x202020, 0.7);
+  scene.add(hemi);
 
   const floorGeo = new THREE.PlaneGeometry(200, 200);
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x14181d, roughness: 1 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2a2f36, roughness: 1 });
   const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
@@ -38,6 +40,23 @@ export function initScene(canvas) {
     noiseRings: new Map(),
     builtLevelId: null
   };
+}
+
+function makeLabelSprite(text, color = '#ffe9b0') {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256; canvas.height = 64;
+  const ctx2 = canvas.getContext('2d');
+  ctx2.font = 'bold 28px sans-serif';
+  ctx2.textAlign = 'center';
+  ctx2.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx2.fillRect(0, 8, 256, 48);
+  ctx2.fillStyle = color;
+  ctx2.fillText(text, 128, 42);
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(2.2, 0.55, 1);
+  return sprite;
 }
 
 function colorForNoise(strength) {
@@ -76,9 +95,20 @@ function buildLevel(ctx, level) {
   van.position.set(level.vanPos.x, 0.8, level.vanPos.y);
   group.add(van);
 
-  const dirLight = new THREE.DirectionalLight(0x405060, 0.4);
+  const dirLight = new THREE.DirectionalLight(0xaabbdd, 0.9);
   dirLight.position.set(10, 30, 10);
   group.add(dirLight);
+
+  // ceiling-style fill lights spread across the room so it's never pitch black
+  const cols = Math.max(2, Math.round(level.size.w / 10));
+  const rows = Math.max(2, Math.round(level.size.h / 10));
+  for (let cx = 0; cx < cols; cx++) {
+    for (let cy = 0; cy < rows; cy++) {
+      const pl = new THREE.PointLight(0xfff0d0, 0.6, 14, 2);
+      pl.position.set((cx + 0.5) * (level.size.w / cols), 4, (cy + 0.5) * (level.size.h / rows));
+      group.add(pl);
+    }
+  }
 
   ctx.scene.add(group);
   ctx.levelGroup = group;
@@ -119,26 +149,44 @@ function ensurePlayerMesh(ctx, p) {
 function ensureMonsterMesh(ctx, m) {
   if (ctx.monsterMeshes.has(m.id)) return ctx.monsterMeshes.get(m.id);
   const def = GameData.MONSTER_TYPES[m.type];
+  const group = new THREE.Group();
   const geo = new THREE.ConeGeometry(0.5, 1.8, 6);
   const mat = new THREE.MeshStandardMaterial({ color: def.color, emissive: 0x110000 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
-  ctx.scene.add(mesh);
-  ctx.monsterMeshes.set(m.id, mesh);
-  return mesh;
+  group.add(mesh);
+  const label = makeLabelSprite(def.name, '#ff8080');
+  label.position.set(0, 1.6, 0);
+  group.add(label);
+  ctx.scene.add(group);
+  const entry = { group, mesh };
+  ctx.monsterMeshes.set(m.id, entry);
+  return entry;
 }
 
 function ensureItemMesh(ctx, item) {
   if (ctx.itemMeshes.has(item.id)) return ctx.itemMeshes.get(item.id);
   const def = GameData.ITEM_DEFS[item.type];
+  const group = new THREE.Group();
   const size = 0.3 + (def.weight || 1) * 0.15;
   const geo = new THREE.BoxGeometry(size, size, size);
   const mat = new THREE.MeshStandardMaterial({ color: def.fragile ? 0xffe0a0 : 0xd0b070, metalness: 0.3 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.castShadow = true;
-  ctx.scene.add(mesh);
-  ctx.itemMeshes.set(item.id, mesh);
-  return mesh;
+  group.add(mesh);
+  const label = makeLabelSprite(`${def.name} ($${def.value})`, '#ffe9b0');
+  label.position.set(0, size + 0.5, 0);
+  group.add(label);
+  const glowGeo = new THREE.RingGeometry(0.45, 0.55, 24);
+  const glowMat = new THREE.MeshBasicMaterial({ color: 0x6fff8f, transparent: true, opacity: 0, side: THREE.DoubleSide });
+  const glow = new THREE.Mesh(glowGeo, glowMat);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.03;
+  group.add(glow);
+  ctx.scene.add(group);
+  const entry = { group, mesh, label, glow };
+  ctx.itemMeshes.set(item.id, entry);
+  return entry;
 }
 
 export function syncScene(ctx, state, myId) {
@@ -161,29 +209,34 @@ export function syncScene(ctx, state, myId) {
   }
 
   const livingMonsterIds = new Set(state.monsters.map(m => m.id));
-  for (const [id, mesh] of ctx.monsterMeshes) {
-    if (!livingMonsterIds.has(id)) { ctx.scene.remove(mesh); ctx.monsterMeshes.delete(id); }
+  for (const [id, entry] of ctx.monsterMeshes) {
+    if (!livingMonsterIds.has(id)) { ctx.scene.remove(entry.group); ctx.monsterMeshes.delete(id); }
   }
   for (const m of state.monsters) {
-    const mesh = ensureMonsterMesh(ctx, m);
-    mesh.position.set(m.x, 0.9, m.y);
-    mesh.rotation.y = -m.facing + Math.PI / 2;
-    mesh.material.emissive.set(m.state === 'chase' || m.state === 'raging' ? 0x550000 : 0x110000);
+    const entry = ensureMonsterMesh(ctx, m);
+    entry.group.position.set(m.x, 0.9, m.y);
+    entry.group.rotation.y = -m.facing + Math.PI / 2;
+    entry.mesh.material.emissive.set(m.state === 'chase' || m.state === 'raging' ? 0x880000 : 0x110000);
   }
 
   const livingItemIds = new Set(state.items.map(i => i.id));
-  for (const [id, mesh] of ctx.itemMeshes) {
-    if (!livingItemIds.has(id)) { ctx.scene.remove(mesh); ctx.itemMeshes.delete(id); }
+  for (const [id, entry] of ctx.itemMeshes) {
+    if (!livingItemIds.has(id)) { ctx.scene.remove(entry.group); ctx.itemMeshes.delete(id); }
   }
   for (const item of state.items) {
-    const mesh = ensureItemMesh(ctx, item);
+    const entry = ensureItemMesh(ctx, item);
     if (item.heldBy) {
       const holder = state.players.find(p => p.id === item.heldBy);
-      if (holder) mesh.position.set(holder.x, 1.4, holder.y);
+      if (holder) entry.group.position.set(holder.x, 1.4, holder.y);
+      entry.label.visible = false;
+      entry.glow.material.opacity = 0;
     } else {
-      mesh.position.set(item.x, item.broken ? 0.05 : 0.25, item.y);
+      entry.group.position.set(item.x, item.broken ? 0.05 : 0.25, item.y);
+      entry.label.visible = true;
+      const near = me && Math.hypot(item.x - me.x, item.y - me.y) < 1.5;
+      entry.glow.material.opacity = near ? 0.7 : 0;
     }
-    mesh.material.color.set(item.broken ? 0x553333 : (GameData.ITEM_DEFS[item.type].fragile ? 0xffe0a0 : 0xd0b070));
+    entry.mesh.material.color.set(item.broken ? 0x553333 : (GameData.ITEM_DEFS[item.type].fragile ? 0xffe0a0 : 0xd0b070));
   }
 
   const liveSmokeIds = new Set((state.smokeZones || []).map((z, i) => 'z' + i));

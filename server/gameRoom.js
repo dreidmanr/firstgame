@@ -114,7 +114,12 @@ class GameRoom {
     const len = Math.hypot(dx, dy) || 1;
     dx = (dx / len) * speed * dt;
     dy = (dy / len) * speed * dt;
-    p.x += dx; p.y += dy;
+    const radius = 0.4;
+    const level = this.run.level;
+    let nx = p.x + dx;
+    if (!this.collidesWall(level, nx, p.y, radius)) p.x = nx; else dx = 0;
+    let ny = p.y + dy;
+    if (!this.collidesWall(level, p.x, ny, radius)) p.y = ny; else dy = 0;
     p.dx = dx; p.dy = dy;
     p.facing = input.facing != null ? input.facing : p.facing;
     p.crouching = !!input.crouch;
@@ -135,6 +140,15 @@ class GameRoom {
     } else {
       p.lastNoise = 0;
     }
+  }
+
+  collidesWall(level, x, y, radius) {
+    if (x - radius < 0 || x + radius > level.size.w || y - radius < 0 || y + radius > level.size.h) return true;
+    for (const room of level.rooms) {
+      if (!room.wall) continue;
+      if (x + radius > room.x && x - radius < room.x + room.w && y + radius > room.y && y - radius < room.y + room.h) return true;
+    }
+    return false;
   }
 
   handleInteract(playerId, data) {

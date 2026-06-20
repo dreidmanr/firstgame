@@ -1,5 +1,9 @@
 import * as THREE from 'three';
 import { initScene, syncScene } from './render.js';
+import { startAmbient, setTension, playFootstep, playStinger, playPickup } from './audio.js';
+
+window.addEventListener('pointerdown', startAmbient, { once: true });
+window.addEventListener('keydown', startAmbient, { once: true });
 
 const socket = io();
 const GameData = window.GameData;
@@ -91,6 +95,7 @@ socket.on('runStarted', (state) => {
   document.getElementById('hud-alarm').classList.add('hidden');
 });
 
+let wasDowned = false;
 socket.on('state', (state) => {
   latestState = state;
   const me = state.players.find(p => p.id === myId);
@@ -99,6 +104,7 @@ socket.on('state', (state) => {
   document.getElementById('hud-goal').textContent = `$${Math.round(state.stolenValue)} / $${state.level.goal}`;
   document.getElementById('hud-noise-label').textContent = me ? `Noise: ${(me.lastNoise * 100).toFixed(0)}%` : '';
   renderInventory(me, state);
+  renderPrompt(me, state);
   const alarmEl = document.getElementById('hud-alarm');
   if (state.alarmActive) {
     alarmEl.classList.remove('hidden');
@@ -106,7 +112,44 @@ socket.on('state', (state) => {
   } else {
     alarmEl.classList.add('hidden');
   }
+
+  if (me && me.lastNoise > 0.1) playFootstep(me.lastNoise);
+  const anyChasing = state.monsters.some(m => m.state === 'chase' || m.state === 'raging');
+  setTension((state.alarmActive ? 0.7 : 0) + (anyChasing ? 0.6 : 0));
+  if (me && me.downed && !wasDowned) playStinger();
+  wasDowned = !!(me && me.downed);
 });
+
+function renderPrompt(me, state) {
+  const el = document.getElementById('hud-prompt');
+  if (!me) { el.textContent = ''; return; }
+  if (me.downed) {
+    const teammate = state.players.find(p => p.id !== myId && !p.downed && Math.hypot(p.x - me.x, p.y - me.y) < 1.8);
+    el.textContent = teammate ? '' : '';
+    return;
+  }
+  for (const item of state.items) {
+    if (item.heldBy) continue;
+    if (Math.hypot(item.x - me.x, item.y - me.y) < 1.5) {
+      const def = GameData.ITEM_DEFS[item.type];
+      el.textContent = `[E] Pick up ${def.name}`;
+      return;
+    }
+  }
+  if (me.inventory.some(s => s)) { el.textContent = '[E] Drop item'; return; }
+  for (const p of state.players) {
+    if (p.id !== myId && p.downed && Math.hypot(p.x - me.x, p.y - me.y) < 1.8) {
+      el.textContent = `[E] Revive ${p.name}`;
+      return;
+    }
+  }
+  const van = state.level.vanPos;
+  if (Math.hypot(me.x - van.x, me.y - van.y) < 3 && me.inventory.some(s => s)) {
+    el.textContent = '[F] Sell loot at van';
+    return;
+  }
+  el.textContent = '';
+}
 
 function renderInventory(me, state) {
   const el = document.getElementById('hud-inventory');
@@ -228,7 +271,7 @@ function tryInteract() {
     const d = Math.hypot(item.x - me.x, item.y - me.y);
     if (d < nearestD) { nearest = item; nearestD = d; }
   }
-  if (nearest) { socket.emit('interact', { action: 'pickup', itemId: nearest.id }); return; }
+  if (nearest) { socket.emit('interact', { action: 'pickup', itemId: nearest.id }); playPickup(); return; }
   const slotIdx = me.inventory.findIndex(s => s);
   if (slotIdx !== -1) socket.emit('interact', { action: 'drop', itemId: me.inventory[slotIdx] });
   for (const p of latestState.players) {
